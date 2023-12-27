@@ -1,0 +1,72 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract SimpleLending {
+    address public owner;
+    mapping(address => Loan) public loans;
+
+    struct Loan {
+        uint256 principal;
+        uint256 interestRate;
+        uint256 durationDays;
+        uint256 startTime;
+        uint256 collateralAmount;
+        uint256 status; // 0: Not Initiated, 1: Active, 2: Closed
+    }
+
+    event LoanIssued(address borrower, uint256 amount, uint256 collateralAmount, uint256 dueDate);
+    event LoanRepaid(address borrower, uint256 amount);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not the owner");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function borrow(uint256 principal, uint256 interestRate, uint256 durationDays, uint256 collateralAmount) external payable {
+        require(loans[msg.sender].status == 0, "Existing loan not yet closed");
+        require(msg.value >= collateralAmount, "Insufficient collateral");
+
+        uint256 totalAmount = principal + calculateInterest(principal, interestRate, durationDays);
+
+        // Transfer total amount to borrower
+        payable(msg.sender).transfer(totalAmount);
+
+        // Update loan details
+        loans[msg.sender] = Loan({
+            principal: principal,
+            interestRate: interestRate,
+            durationDays: durationDays,
+            startTime: block.timestamp,
+            collateralAmount: collateralAmount,
+            status: 1
+        });
+
+        emit LoanIssued(msg.sender, principal, collateralAmount, block.timestamp + (durationDays * 1 days));
+    }
+
+    function repay() external payable {
+        require(loans[msg.sender].status == 1, "No active loan");
+
+        // Transfer repaid amount to owner
+        payable(owner).transfer(msg.value);
+
+        // Close the loan
+        loans[msg.sender].status = 2;
+
+        emit LoanRepaid(msg.sender, msg.value);
+    }
+
+    function calculateInterest(uint256 principal, uint256 interestRate, uint256 durationDays) internal pure returns (uint256) {
+        // Simple interest calculation for demonstration purposes
+        return (principal * interestRate * durationDays) / (365 * 100);
+    }
+
+    function getLoanDetails(address borrower) external view returns (uint256, uint256, uint256, uint256, uint256) {
+        Loan memory loan = loans[borrower];
+        return (loan.principal, loan.interestRate, loan.durationDays, loan.startTime, loan.status);
+    }
+}
